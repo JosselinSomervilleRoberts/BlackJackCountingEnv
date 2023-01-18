@@ -2,6 +2,12 @@ import numpy as np
 import gym
 from deck import DecksOfCards
 
+ACTION_HIT = 0
+ACTION_STAND = 1
+ACTION_DOUBLE = 2
+ACTION_SPLIT = 3
+ACTION_SURRENDER = 4
+
 
 class BlackJackPlayingEnv(gym.Env):
     def __init__(self, decks: DecksOfCards, rules: dict = {}, illegal_action_reward: float = -100):
@@ -48,8 +54,8 @@ class BlackJackPlayingEnv(gym.Env):
         - double (bool): whether the player can double or not.
         '''
         self.observation_space = gym.spaces.Tuple((
-            gym.spaces.Discrete(32),
-            gym.spaces.Discrete(11),
+            gym.spaces.Discrete(28, start=4), # from 4 to 31.
+            gym.spaces.Discrete(10, start=2), # from 2 to 11.
             gym.spaces.Discrete(2),
             gym.spaces.Discrete(2),
             gym.spaces.Discrete(2),
@@ -90,7 +96,10 @@ class BlackJackPlayingEnv(gym.Env):
     def finish_game(self):
         dealer_sum = self.play_dealer()
         player_sum = self.cur_state[0]
-        if dealer_sum > 21:
+        if player_sum == 21 and len(self.player_cards) == 2:
+            reward = 2 * self.blackjack_payout
+            reason = "player blackjack"
+        elif dealer_sum > 21:
             reward = 2
             reason = "dealer bust"
         elif dealer_sum < player_sum:
@@ -109,7 +118,7 @@ class BlackJackPlayingEnv(gym.Env):
         reward, reason, done, info = 0, "", False, {}
 
         # hit
-        if action == 0:
+        if action == ACTION_HIT:
             (player_sum, _, usable_ace, split, double) = self.hit(self.player_cards, self.cur_state[0], self.cur_state[2])
             self.cur_state = (player_sum, dealer_card, usable_ace, split, double)
             if player_sum > 21:
@@ -118,15 +127,15 @@ class BlackJackPlayingEnv(gym.Env):
                 done = True
 
         # stay
-        elif action == 1:
+        elif action == ACTION_STAND:
             reward, reason, _ = self.finish_game()
             player_sum = self.cur_state[0]
             done = True
 
         # double
-        elif action == 2:
+        elif action == ACTION_DOUBLE:
             if not self.cur_state[4]: # cannot double
-                return self.cur_state, self.illegal_action_reward, True, {"reason": "illegal action, cannot double"}
+                return (self.cur_state, self.illegal_action_reward, True, {}), self.illegal_action_reward, True, {"reason": "illegal action, cannot double"}
             (player_sum, _, usable_ace, split, double) = self.hit(self.player_cards, self.cur_state[0], self.cur_state[2])
             self.cur_state = (player_sum, dealer_card, usable_ace, split, double)
             if player_sum > 21:
@@ -138,9 +147,9 @@ class BlackJackPlayingEnv(gym.Env):
             done = True
 
         # split
-        elif action == 3:
+        elif action == ACTION_SPLIT:
             if not self.cur_state[3]: # cannot split
-                return self.cur_state, self.illegal_action_reward, True, {"reason": "illegal action, cannot split"}
+                return (self.cur_state, self.illegal_action_reward, True, {}), self.illegal_action_reward, True, {"reason": "illegal action, cannot split"}
 
             # Split the cards
             other_cards = [self.player_cards[1]]
@@ -183,9 +192,9 @@ class BlackJackPlayingEnv(gym.Env):
                 self.player_other_cards.pop(0)
 
         # surrender
-        elif action == 4:
+        elif action == ACTION_SURRENDER:
             if not self.surrender: # cannot surrender
-                return self.cur_state, self.illegal_action_reward, True, {"reason": "illegal action, cannot surrender"}
+                return (self.cur_state, self.illegal_action_reward, True, {}), self.illegal_action_reward, True, {"reason": "illegal action, cannot surrender"}
             reward = -1
             reason = "player surrender"
             done = True
@@ -212,15 +221,15 @@ class BlackJackPlayingEnv(gym.Env):
         return action
 
     def is_legal_action(self, action: int):
-        if action == 0:
+        if action == ACTION_HIT:
             return True
-        elif action == 1:
+        elif action == ACTION_STAND:
             return True
-        elif action == 2:
+        elif action == ACTION_DOUBLE:
             return self.cur_state[4]
-        elif action == 3:
+        elif action == ACTION_SPLIT:
             return self.cur_state[3]
-        elif action == 4:
+        elif action == ACTION_SURRENDER:
             return self.surrender
 
 
