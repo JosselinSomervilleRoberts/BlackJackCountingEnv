@@ -33,7 +33,7 @@ def show_sub_policy(fig, axs, idx_rox_ax, policy, reward, title, xlim, ylim, yle
     axs[idx_rox_ax, 1].set_xticks(np.arange(xlim[0], xlim[1]+1, 1))
     axs[idx_rox_ax, 1].set_yticks(np.arange(ylim[0], ylim[1]+1, 1))
 
-def show_policy(policy, expected_values, state_action_to_idx, nb_iterations):
+def show_policy(policy, expected_values, state_action_to_idx, nb_iterations, count=None):
     fig, axs = plt.subplots(nrows=3, ncols=2, gridspec_kw={'width_ratios':[1,1], 'height_ratios':[20 - 5 +1, 20 - 13 + 1, 10]})
     plt.subplots_adjust(hspace=0.1, wspace = 0.5, top=0.88)
     fig.set_figwidth(5)
@@ -45,8 +45,8 @@ def show_policy(policy, expected_values, state_action_to_idx, nb_iterations):
     hard_reward = np.zeros((16, 10))
     for player_sum in range(5, 20+1):
         for dealer_card in range(2, 11+1):
-            state_double = (player_sum, dealer_card, 0, 0, 1)
-            state_no_double = (player_sum, dealer_card, 0, 0, 0)
+            state_double = (player_sum, dealer_card, 0, 0, 1, count) if count is not None else (player_sum, dealer_card, 0, 0, 1)
+            state_no_double = (player_sum, dealer_card, 0, 0, 0, count) if count is not None else (player_sum, dealer_card, 0, 0, 0)
             state = None
             if state_double in policy: state = state_double
             elif state_no_double in policy: state = state_no_double
@@ -61,8 +61,8 @@ def show_policy(policy, expected_values, state_action_to_idx, nb_iterations):
     soft_reward = np.zeros((8, 10))
     for player_sum in range(13, 20+1):
         for dealer_card in range(2, 11+1):
-            state_double = (player_sum, dealer_card, 1, 0, 1)
-            state_no_double = (player_sum, dealer_card, 1, 0, 0)
+            state_double = (player_sum, dealer_card, 1, 0, 1, count) if count is not None else (player_sum, dealer_card, 1, 0, 1)
+            state_no_double = (player_sum, dealer_card, 1, 0, 0, count) if count is not None else (player_sum, dealer_card, 1, 0, 0)
             state = None
             if state_double in policy: state = state_double
             elif state_no_double in policy: state = state_no_double
@@ -79,7 +79,7 @@ def show_policy(policy, expected_values, state_action_to_idx, nb_iterations):
         for dealer_card in range(2, 11+1):
             player_sum = 2 * card
             if player_sum > 21: player_sum -= 10
-            state_double = (player_sum, dealer_card, card==11, 1, 1)
+            state_double = (player_sum, dealer_card, card==11, 1, 1, count) if count is not None else (player_sum, dealer_card, card==11, 1, 1)
             if state_double in policy:
                 action = policy[state_double]
                 split_policy[card-2, dealer_card-2] = action

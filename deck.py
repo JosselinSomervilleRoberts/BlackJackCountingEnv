@@ -1,5 +1,5 @@
 import random
-
+import numpy as np
 
 def card_value(card):
     if card == 1:
@@ -42,6 +42,31 @@ class InfiniteDeckOfCards(DeckOfCards):
         return random.choice(self.cards)
 
 
+class SimulatedCountingDeckOfCards(DeckOfCards):
+
+    def __init__(self, true_count: int, n_binomial = 50):
+        super().__init__()
+        self.true_count = true_count
+        self.n_binomial = n_binomial
+        self.reset()
+
+    def reset(self):
+        self.prob_neutral = np.random.binomial(p=3/13., n=self.n_binomial) / self.n_binomial
+        self.prob_high = 1/2. + self.true_count / 104. - self.prob_neutral / 2.
+
+    def draw(self):
+        x = random.random()
+        if x <= self.prob_neutral:
+            return random.choice([7, 8, 9])
+        elif x <= self.prob_neutral + self.prob_high:
+            return random.choice([1, 10, 11, 12, 13])
+        else:
+            return random.choice([2, 3, 4, 5, 6])
+
+    def get_true_count(self):
+        """Returns the true count."""
+        return self.true_count
+
 
 class DecksOfCards(DeckOfCards):
 
@@ -76,7 +101,7 @@ class DecksOfCards(DeckOfCards):
     def get_true_count(self):
         """Returns the true count."""
         if self.high_low_count == 0: return 0 # handle division by zero
-        return self.high_low_count / (self.nb_decks - self.nb_cards_out / 52.)
+        return int(self.high_low_count / (self.nb_decks - self.nb_cards_out / 52.))
 
     def get_cards_out(self):
         return self.cards_out

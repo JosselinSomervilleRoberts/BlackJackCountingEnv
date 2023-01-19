@@ -252,7 +252,7 @@ class BlackJackPlayingEnv(gym.Env):
         dealer_card_value = card_value(self.dealer_cards[0])
         split  = self.check_if_can_split(cards)
         double = self.check_if_can_double(cards)
-        return (player_sum, dealer_card_value, usable_ace, split, double)
+        return (player_sum, dealer_card_value, usable_ace, split, double, self.decks.get_true_count())
 
     def check_blackjack(cards):
         return len(cards) == 2 and card_value(cards[0]) + card_value(cards[1]) == 21
