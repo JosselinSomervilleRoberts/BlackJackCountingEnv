@@ -94,6 +94,7 @@ class QLearningAgent:
             new_q = reward + self.discount_factor * np.max(self.Q[index_next_state]) + self.delta
         # alpha update Q value
         alpha = self.learning_rate(self.learn_index)
+        self.learn_index += 1
         q_before = self.Q[index_state,index_action]
         self.Q[index_state,index_action] += alpha * (new_q - self.Q[index_state,index_action])
         #if index_state == 222: print(reward, new_q, q_before, self.Q[index_state,index_action])
@@ -107,6 +108,7 @@ class QLearningAgent:
             new_q += self.discount_factor * np.max(self.Q[index_next_state_2])
         # alpha update Q value
         alpha = self.learning_rate(self.learn_index)
+        self.learn_index += 1
         self.Q[index_state,index_action] += alpha * (new_q - self.Q[index_state,index_action])
 
     def learn(self, state, action, effective_reward):

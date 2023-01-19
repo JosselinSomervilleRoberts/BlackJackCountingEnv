@@ -13,48 +13,66 @@ class BlackJackBettingEnv(gym.Env):
         self.min_bet = min_bet
         self.max_bet = max_bet
         self.current_money = initial_money
+        self.initial_money = initial_money
         self.illegal_bet_reward = illegal_bet_reward
 
         # ACTIONS space: the bet to be placed
-        self.action_space = gym.paces.Discrete(1 + self.max_bet - self.min_bet)
+        self.action_space = gym.spaces.Discrete(1 + self.max_bet - self.min_bet)
 
         # OBSERVATION space: the player's gain
-        self.observation_space = gym.spaces.Discrete(2 * initial_money + 1)
+        self.observation_space = gym.spaces.Discrete(2 * initial_money, 1 + self.max_bet - self.min_bet)
+
+    def reset(self):
+        """Resets the environment.
+        Returns:
+            - observation (int, int): the player's money, the true count (TC).
+            - info (dict): additional information.
+        """
+        self.current_money = self.initial_money
+        self.playing_env.reset()
+        return (self.current_money, self.playing_env.decks.get_true_count()), {}
     
     def step(self, action: int):
         """Selects the bet to be placed.
         Returns:
-            - observation (int, int, int): the player's money, the running count (RC), the true count (TC).
+            - observation (int, int): the player's money, the true count (TC).
             - reward (float): the reward for the action.
             - done (bool): whether the game is over or not.
             - info (dict): additional information."""
 
         # place the bet
-        bet = action + self.min_bet
+        bet = action
         if bet > self.current_money: 
-            return 0, self.illegal_bet_reward, False, {"status": "not enough money"}
-        if bet > self.max_bet: 
-            return 0, self.illegal_bet_reward, False, {"status": "bet too high"}
+            return (self.current_money, self.playing_env.decks.get_true_count()), self.illegal_bet_reward, False, {"status": "not enough money"}
+        if bet > self.max_bet:
+            return (self.current_money, self.playing_env.decks.get_true_count()), self.illegal_bet_reward, False, {"status": "bet too high"}
         self.current_money -= bet
 
         # play the game
         playing_obs, playing_reward, playing_done, playing_info = None, None, False, {}
+        playing_obs, playing_info = self.playing_env.reset()
+        sum_reward = 0
         while not playing_done:
-            playing_obs, playing_reward, playing_done, playing_info = self.playing_env.step(self.player_agent.act(playing_obs, playing_reward, playing_done, playing_info))
+            playing_obs, playing_reward, playing_done, playing_info = self.playing_env.step(self.player_agent.choose_action(playing_obs, playing_reward, playing_done, playing_info))
+            sum_reward += playing_reward
+            #print("playing_obs", playing_obs, "playing_reward", playing_reward)
+        self.playing_env.decks.round_finished()
 
         # update the player's money
-        gain = playing_obs * bet
+        #print("sum_reward", sum_reward, "bet", bet)
+        gain = sum_reward * bet
         profit = gain - bet
         self.current_money += gain
 
         # return the observation, the reward, whether the game is over or not, and additional information
-        obs = (self.current_money, self.playing_env.decks.get_running_count(), round(self.playing_env.decks.get_true_count()))
+        obs = (self.current_money, round(self.playing_env.decks.get_true_count()))
         reward = profit
         status = "ongoing game"
         done = False
         if self.current_money < self.min_bet: 
             done = True
             status = "game over"
+            reward = - 2 * self.initial_money
         info = {"status": status}
         return obs, reward, done, info
 
