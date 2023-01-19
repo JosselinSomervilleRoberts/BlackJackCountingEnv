@@ -5,39 +5,6 @@ from agent import QLearningAgent
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-from copy import deepcopy
-
-
-def compute_effective_reward(data, gamma):
-    """data is a list of step under the format: (state, action, reward, next_state, done)"""
-    effective_reward = data[-1]["reward"]
-    data[-1]["effective_reward"] = effective_reward
-    last_done_rewards = []
-    discount = 1
-    for i in range(len(data) - 1, -1, -1):
-        if data[i]["done"]:
-            last_done_rewards.append(data[i]["reward"])
-            discount = 1
-            data[i]["effective_reward"] = last_done_rewards[-1]
-        elif data[i]["action"] != 3: # not a split
-            discount *= gamma
-            data[i]["effective_reward"] = data[i]["reward"] + last_done_rewards[-1] * discount
-        else: # a split
-            reward = data[i]["reward"]
-            if reward < 0: # illegal split
-                data[i]["effective_reward"] = reward
-                last_done_rewards.append(reward)
-            elif int(reward) == 6: # double blackjack
-                data[i]["effective_reward"] = reward
-                last_done_rewards.append(reward)
-            elif int(reward) == 3: # blackjack
-                last_done_rewards[-1] += reward
-                data[i]["effective_reward"] = last_done_rewards[-1]
-            else: # no blackjack
-                last_reward = last_done_rewards.pop(-1)
-                last_done_rewards[-1] += last_reward
-                data[i]["effective_reward"] = data[i]["reward"] + last_done_rewards[-1] 
-            discount = 1
 
 
 def get_card_of_value(card_value):
@@ -50,15 +17,43 @@ def get_card_of_value(card_value):
     else:
         raise Exception("Invalid card value: {}".format(card_value))
 
-def generate_cards_from_state(state):
+def generate_cards_from_state(state, rules):
     player_sum = state[OBS_PLAYER_SUM_IDX]
-    card_value_1 = random.randint(max(2, player_sum - 11), min(11, player_sum - 2))
-    card_value_2 = player_sum - card_value_1
-    card_1 = get_card_of_value(card_value_1)
-    card_2 = get_card_of_value(card_value_2)
+    card_1, card_2, card_3, dealer_card_2 = None, None, None, None
+    if not state[OBS_CAN_DOUBLE_IDX] and rules["double_allowed"]: # cannot double while the rules allow it. This means that there are at least 3 cards
+        card_value_1 = 11 if state[OBS_USABLE_ACE_IDX] else random.randint(2, min(10, player_sum - 4))
+        player_sum = player_sum - card_value_1
+        card_value_2 = random.randint(max(2 - state[OBS_USABLE_ACE_IDX], player_sum - 10), min(10, player_sum - 2 + state[OBS_USABLE_ACE_IDX]))
+        card_value_3 = player_sum - card_value_2
+        card_1 = get_card_of_value(card_value_1)
+        card_2 = get_card_of_value(card_value_2)
+        card_3 = get_card_of_value(card_value_3)
+    elif state[OBS_CAN_SPLIT_IDX]:
+        if state[OBS_USABLE_ACE_IDX]: # double aces
+            card_1, card_2 = 1, 1
+        else:
+            card_1 = get_card_of_value(player_sum // 2)
+            card_2 = card_1
+    else:
+        # We use min(10, player_sum - 2) and min(10, player_sum - 1) as we want to avoid a value of 1 in the second card.
+        # If there is one ace then it will be the first card. The only case where we can have a value of 1 in the second card is when we have two aces.
+        # This case is already covered in the plit condition above, so we can forbid having an ace for the second card.
+        card_value_1 = 11 if state[OBS_USABLE_ACE_IDX] else random.randint(max(2, player_sum - 10), min(10, player_sum - 2))
+        card_value_2 = player_sum - card_value_1
+        card_1 = get_card_of_value(card_value_1)
+        card_2 = get_card_of_value(card_value_2)
+
     dealer_card_1 = get_card_of_value(state[OBS_DEALER_CARD_IDX])
-    dealer_card_2 = random.randint(1, 14)
-    return [card_1, card_2], [dealer_card_1, dealer_card_2]
+    # dealer cannot have a blackjack
+    if state[OBS_DEALER_CARD_IDX] == 11: # cannot have a value of 10
+        dealer_card_2 = random.randint(1, 10)
+    elif state[OBS_DEALER_CARD_IDX] == 10: # cannot have an ace
+        dealer_card_2 = random.randint(2, 14)
+    else: # can have any card
+        dealer_card_2 = random.randint(1, 14)
+    player_cards = [card_1, card_2]
+    if card_3 is not None: player_cards.append(card_3)
+    return player_cards, [dealer_card_1, dealer_card_2]
 
 def get_legal_actions(state, rules):
     list_actions = [0, 1]
@@ -79,7 +74,7 @@ def register_mapping(state, rules, idx, dict_sati, list_itsa):
     return idx
 
 if __name__ == "__main__":
-    N_ITER = 1000
+    N_ITER = 3000
 
     rules = {
                 "double_allowed": True,
@@ -101,7 +96,7 @@ if __name__ == "__main__":
         # WITH SPLITS AND DOUBLING
         # states without doubling
         hards_no_double  = list(range(6, 20 + 1))  # - hard 6 - 20 (no hard 4 as it is split 2, no hard 5 as it can only be 2 and 3 which can be doubled)
-        softs_no_double  = list(range(14, 21 + 1)) # - soft 14 - 21 (no soft 12 as soft 12 is split A, no soft 13 as it can only be As and 2 which can be doubled)
+        softs_no_double  = list(range(13, 21 + 1)) # - soft 13 - 21 (no soft 12 as soft 12 is split A)
         splits_no_double = []                      # - No splits as they can be doubled
 
         # states with doubling
@@ -123,7 +118,7 @@ if __name__ == "__main__":
         # NO SPLITS BUT WITH DOUBLING
         # states without doubling
         hards_no_double  = list(range(6, 20 + 1))  # - hard 6 - 20 (no hard 4 nor hard 5 as they can only be 2-2 and 2-3 respectively which can be doubled)
-        softs_no_double  = list(range(14, 21 + 1)) # - soft 14 - 21 (no soft 12 nor soft 13 as they can only be As-As and As-2 respectively which can be doubled)
+        softs_no_double  = list(range(13, 21 + 1)) # - soft 13 - 21 (no soft 12 as it can only be As-As which can be doubled)
         splits_no_double = []                      # - No splits allowed
 
         # states with doubling
@@ -192,43 +187,44 @@ if __name__ == "__main__":
     deck = InfiniteDeckOfCards()
     env = BlackJackPlayingEnv(decks = deck, rules=rules)
 
-    # Expected reward
-    exp_reward = [0] * n_pair_states_action
+    N_POLICY_ITER = 5
+    for _ in range(N_POLICY_ITER):
+        # Expected reward
+        exp_reward = [0] * n_pair_states_action
 
-    n_total = n_pair_states_action * N_ITER
-    for i in tqdm(range(n_total)):
-        idx = i // N_ITER
-        (state, action) = idx_to_state_action[idx]
-        player_cards, dealer_cards = generate_cards_from_state(state)
-        env.reset_from_cards(player_cards, dealer_cards)
+        n_total = n_pair_states_action * N_ITER
+        for i in tqdm(range(n_total)):
+            idx = i // N_ITER
+            (state, action) = idx_to_state_action[idx]
+            player_cards, dealer_cards = generate_cards_from_state(state, rules)
+            env.reset_from_cards(player_cards, dealer_cards)
 
-        # Play the game
-        state, reward, done, _ = env.step(action)
-        reward_total = reward
-        while not done:
-            action = ACTION_STAND
-            if state in policy: action = policy[format_state(state)]
+            # Play the game
             state, reward, done, _ = env.step(action)
-            reward_total += reward
+            reward_total = reward
+            while not done:
+                action = ACTION_STAND
+                if state in policy: action = policy[format_state(state)]
+                state, reward, done, _ = env.step(action)
+                reward_total += reward
 
-        # Update expected reward
-        exp_reward[idx] += reward_total
+            # Update expected reward
+            exp_reward[idx] += reward_total
 
-    for idx in range(n_pair_states_action):
-        (state, action) = idx_to_state_action[idx]
-        print("State:", state, "Action:", action, "Expected reward:", exp_reward[idx] / N_ITER)
+        # New policy
+        new_policy = {}
+        expected_reward_of_policy = {}
+        for idx in range(n_pair_states_action):
+            (state, action) = idx_to_state_action[idx]
+            if state not in new_policy:
+                new_policy[state] = action
+                expected_reward_of_policy[state] = exp_reward[idx] / N_ITER
+            elif exp_reward[idx] / N_ITER > expected_reward_of_policy[state]:
+                new_policy[state] = action
+                expected_reward_of_policy[state] = exp_reward[idx] / N_ITER
 
-    # New policy
-    new_policy = {}
-    expected_reward_of_policy = {}
-    for idx in range(n_pair_states_action):
-        (state, action) = idx_to_state_action[idx]
-        if state not in new_policy:
-            new_policy[state] = action
-            expected_reward_of_policy[state] = exp_reward[idx] / N_ITER
-        elif exp_reward[idx] / N_ITER > expected_reward_of_policy[state]:
-            new_policy[state] = action
-            expected_reward_of_policy[state] = exp_reward[idx] / N_ITER
+        # Update policy
+        policy = new_policy
 
     print("\n\n\nNew policy:")
     for state in new_policy.keys():
