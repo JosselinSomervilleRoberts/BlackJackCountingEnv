@@ -262,19 +262,14 @@ class BlackJackPlayingEnv(gym.Env):
         if self.floor_finished_reward: reward = np.floor(reward)
         return reward
 
-    def reset(self):
-        # We include done and reward in the observation to account for potential naturals (blackjack).
-        info = {"done": False, "reward": 0}
-
-        # Draw two cards for the player and the dealer
-        card1_player = self.decks.draw()
-        card1_dealer = self.decks.draw()
-        card2_player = self.decks.draw()
-        card2_dealer = self.decks.draw()
-        self.player_cards = [card1_player, card2_player]
+    def reset_from_cards(self, player_cards: List[int], dealer_cards: List[int]):
+        self.player_cards = player_cards
+        self.dealer_cards = dealer_cards
         self.player_other_hands = [] # for splits
         self.has_already_split = False
-        self.dealer_cards = [card1_dealer, card2_dealer]
+        
+        # We include done and reward in the observation to account for potential naturals (blackjack).
+        info = {"done": False, "reward": 0}
 
         # Check if we got some blackjacks
         if BlackJackPlayingEnv.check_blackjack(self.player_cards):
@@ -293,6 +288,14 @@ class BlackJackPlayingEnv(gym.Env):
         # compute the state
         self.cur_state = self.compute_state()
         return self.cur_state, info # reward and done are only used for naturals
+
+    def reset(self):
+        # Draw two cards for the player and the dealer
+        card1_player = self.decks.draw()
+        card1_dealer = self.decks.draw()
+        card2_player = self.decks.draw()
+        card2_dealer = self.decks.draw()
+        self.reset_from_cards([card1_player, card2_player], [card1_dealer, card2_dealer])
 
 
     def render(self, mode='human'):
