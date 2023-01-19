@@ -1,10 +1,32 @@
 import random
 from playing_env import BlackJackPlayingEnv, OBS_PLAYER_SUM_IDX, OBS_DEALER_CARD_IDX, OBS_USABLE_ACE_IDX, OBS_CAN_SPLIT_IDX, OBS_CAN_DOUBLE_IDX, ACTION_STAND, ACTION_SPLIT, ACTION_SURRENDER, ACTION_DOUBLE
-from deck import DecksOfCards, InfiniteDeckOfCards
-from agent import QLearningAgent
+from deck import InfiniteDeckOfCards
 from tqdm import tqdm
 import numpy as np
-import matplotlib.pyplot as plt
+from policy_show import show_policy
+import pickle
+
+
+def policy_and_reward_save(name, policy, reward, state_action_to_idx):
+    with open(name + '_policy.pickle', 'wb') as f:
+        pickle.dump(policy, f, pickle.HIGHEST_PROTOCOL)
+    with open(name + '_reward.pickle', 'wb') as f:
+        pickle.dump(reward, f, pickle.HIGHEST_PROTOCOL)
+    with open(name + '_state.pickle', 'wb') as f:
+        pickle.dump(state_action_to_idx, f, pickle.HIGHEST_PROTOCOL)
+
+def policy_and_reward_load(name):
+    try:
+        policy, reward, state_action_to_idx = None, None, None
+        with open(name + '_policy.pickle', 'rb') as f:
+            policy = pickle.load(f)
+        with open(name + '_reward.pickle', 'rb') as f:
+            reward = pickle.load(f)
+        with open(name + '_state.pickle', 'rb') as f:
+            state_action_to_idx = pickle.load(f)
+        return True, policy, reward, state_action_to_idx
+    except:
+        return False, None, None, None
 
 
 def get_card_of_value(card_value):
@@ -73,8 +95,7 @@ def register_mapping(state, rules, idx, dict_sati, list_itsa):
         idx += 1
     return idx
 
-if __name__ == "__main__":
-    N_ITER = 3000
+def train(N_ITER = 1000, N_POLICY_ITER = 5):
 
     rules = {
                 "double_allowed": True,
@@ -187,7 +208,6 @@ if __name__ == "__main__":
     deck = InfiniteDeckOfCards()
     env = BlackJackPlayingEnv(decks = deck, rules=rules)
 
-    N_POLICY_ITER = 5
     for _ in range(N_POLICY_ITER):
         # Expected reward
         exp_reward = [0] * n_pair_states_action
@@ -226,6 +246,14 @@ if __name__ == "__main__":
         # Update policy
         policy = new_policy
 
-    print("\n\n\nNew policy:")
-    for state in new_policy.keys():
-        print("State:", state, "Action:", new_policy[state], "Expected reward:", expected_reward_of_policy[state])
+    return policy, exp_reward, state_action_to_idx
+
+
+if __name__ == "__main__":
+    name = "save"
+    N_ITER = 5000
+    success, policy, reward, state_action_to_idx = policy_and_reward_load(name)
+    if not success:
+        policy, reward, state_action_to_idx = train(N_ITER=N_ITER, N_POLICY_ITER=5)
+        policy_and_reward_save(name, policy, reward, state_action_to_idx)
+    show_policy(policy, reward, state_action_to_idx, N_ITER)
