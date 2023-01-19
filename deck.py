@@ -9,33 +9,55 @@ def card_value(card):
     else:
         return card
 
-class DecksOfCards:
 
-    def __init__(self, nb_decks: int, fraction_not_in_play: float = 0.2):
-        self.nb_decks = nb_decks
-        self.threshold = (1. - fraction_not_in_play) * self.nb_decks * 52
-        self.reset()
+class DeckOfCards:
 
-    def reset(self):
-        self.generate_cards()
-        self.shuffle()
-        self.nb_cards_out = 0
-        self.high_low_count = 0
-        self.cards_out = [0] * 13
-        self.needs_shuffle = False
-
-    def generate_cards(self):
+    def __init__(self):
         self.cards = []
-        for _ in range(self.nb_decks):
-            for value in range(1, 14):
-                for _ in range(4):
-                    self.cards.append(value)
 
     def shuffle(self):
         random.shuffle(self.cards)
 
     def get_cards(self):
         return self.cards
+
+    def generate_cards(self, nb_decks=1):
+        self.cards = []
+        for _ in range(nb_decks):
+            for value in range(1, 14):
+                for _ in range(4):
+                    self.cards.append(value)
+
+
+class InfiniteDeckOfCards(DeckOfCards):
+
+    def __init__(self):
+        super().__init__()
+        self.reset()
+
+    def reset(self):
+        self.generate_cards(nb_decks=1)
+
+    def draw(self):
+        return random.choice(self.cards)
+
+
+
+class DecksOfCards(DeckOfCards):
+
+    def __init__(self, nb_decks: int, fraction_not_in_play: float = 0.2):
+        super().__init__()
+        self.nb_decks = nb_decks
+        self.threshold = (1. - fraction_not_in_play) * self.nb_decks * 52
+        self.reset()
+
+    def reset(self):
+        self.generate_cards(nb_decks=self.nb_decks)
+        self.shuffle()
+        self.nb_cards_out = 0
+        self.high_low_count = 0
+        self.cards_out = [0] * 13
+        self.needs_shuffle = False
 
     def draw(self):
         if len(self.cards) == 0: raise Exception("No more cards in the deck.")
