@@ -1,10 +1,11 @@
 import random
 from playing_env import BlackJackPlayingEnv, OBS_PLAYER_SUM_IDX, OBS_DEALER_CARD_IDX, OBS_USABLE_ACE_IDX, OBS_CAN_SPLIT_IDX, OBS_CAN_DOUBLE_IDX, ACTION_STAND, ACTION_SPLIT, ACTION_SURRENDER, ACTION_DOUBLE
-from deck import InfiniteDeckOfCards
+from deck import InfiniteDeckOfCards, DecksOfCards
 from tqdm import tqdm
 import numpy as np
 from policy_show import show_policy
 import pickle
+import matplotlib.pyplot as plt
 
 
 def policy_and_reward_save(name, policy, reward, state_action_to_idx):
@@ -95,21 +96,7 @@ def register_mapping(state, rules, idx, dict_sati, list_itsa):
         idx += 1
     return idx
 
-def train(N_ITER = 1000, N_POLICY_ITER = 5):
-
-    rules = {
-                "double_allowed": True,
-                "split_allowed": True,
-                "surrender_allowed": True,
-                "dealer_hit_soft_17": True,
-                "resplit_allowed": True,
-                "blackjack_payout": 1.5,
-                "floor_finished_reward": True
-            }
-
-    n_actions = 2 + rules["double_allowed"] + rules["split_allowed"] + rules["surrender_allowed"]
-    n_dealer_cards = 11
-
+def train(rules, N_ITER = 1000, N_POLICY_ITER = 5):
     hards_no_double, softs_no_double, splits_no_double = [], [], []
     hards_double, softs_double, splits_double = [], [], []
 
@@ -121,7 +108,7 @@ def train(N_ITER = 1000, N_POLICY_ITER = 5):
         splits_no_double = []                      # - No splits as they can be doubled
 
         # states with doubling
-        hards_double = list(range(5, 19 + 1))   # - all hards can be doubled except 20 cause it's a split 10
+        hards_double = list(range(5, 20 + 1))   # - all hards can be doubled
         softs_double = list(range(13, 20 + 1))  # - all softs can be doubled except 21 cause it would be a blackjack
         splits_double = list(range(1, 10 + 1))  # - all splits can be doubled
 
@@ -249,11 +236,65 @@ def train(N_ITER = 1000, N_POLICY_ITER = 5):
     return policy, exp_reward, state_action_to_idx
 
 
+def evaluate_policy(policy, rules, N_EPISODES=10000):
+    decks = DecksOfCards(nb_decks=6, fraction_not_in_play=0.2)
+    env = BlackJackPlayingEnv(decks = decks, rules=rules)
+
+    rewards = np.zeros(N_EPISODES, dtype=int)
+    prev_cum_reward = 0
+    cum_rewards = np.zeros(N_EPISODES, dtype=int)
+
+    for i in tqdm(range(N_EPISODES)):
+        state, info = env.reset()
+
+        # The player or the dealer has a natural blackjack
+        if "done" in info and info["done"]:
+            prev_cum_reward += info["reward"]
+            cum_rewards[i] = prev_cum_reward
+            rewards[i] = info["reward"]
+        else:
+            # Play all the actions until the game is finished
+            sum_reward = 0
+            done = False
+            while not done:
+                action = None
+                state = format_state(state)
+                if state[OBS_PLAYER_SUM_IDX] == 21:
+                    action = ACTION_STAND
+                elif state in policy: action = policy[state]
+                else:
+                    state_no_double = (state[0], state[1], state[2], state[3], 0)
+                    action = policy[state_no_double]
+                state, reward, done, info = env.step(action)
+                sum_reward += reward
+            prev_cum_reward += sum_reward
+            cum_rewards[i] = prev_cum_reward
+            rewards[i] = sum_reward
+
+        # Update the decks
+        decks.round_finished()
+
+    plt.plot(cum_rewards)
+    plt.show()
+
 if __name__ == "__main__":
+    rules = {
+                "double_allowed": True,
+                "split_allowed": True,
+                "surrender_allowed": True,
+                "dealer_hit_soft_17": True,
+                "resplit_allowed": True,
+                "blackjack_payout": 1.5,
+                "floor_finished_reward": True
+            }
+
     name = "save"
     N_ITER = 5000
     success, policy, reward, state_action_to_idx = policy_and_reward_load(name)
     if not success:
-        policy, reward, state_action_to_idx = train(N_ITER=N_ITER, N_POLICY_ITER=5)
+        policy, reward, state_action_to_idx = train(rules, N_ITER=N_ITER, N_POLICY_ITER=5)
         policy_and_reward_save(name, policy, reward, state_action_to_idx)
-    show_policy(policy, reward, state_action_to_idx, N_ITER)
+        show_policy(policy, reward, state_action_to_idx, N_ITER)
+    else:
+        evaluate_policy(policy, rules, N_EPISODES=1000000)
+        show_policy(policy, reward, state_action_to_idx, N_ITER)

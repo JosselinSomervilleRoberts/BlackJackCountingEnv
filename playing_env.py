@@ -295,7 +295,7 @@ class BlackJackPlayingEnv(gym.Env):
         card1_dealer = self.decks.draw()
         card2_player = self.decks.draw()
         card2_dealer = self.decks.draw()
-        self.reset_from_cards([card1_player, card2_player], [card1_dealer, card2_dealer])
+        return self.reset_from_cards([card1_player, card2_player], [card1_dealer, card2_dealer])
 
 
     def render(self, mode='human'):
