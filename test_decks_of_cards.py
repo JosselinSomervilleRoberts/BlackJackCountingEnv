@@ -1,4 +1,4 @@
-from deck import DecksOfCards
+from deck import DecksOfCards, card_value
 import random
 import math
 import numpy as np
@@ -13,23 +13,43 @@ def check_frequency_of_cards(cards, n, variance_multiplier=10):
     The variance_multiplier ensures a correct test with a probability higher than 99% (see https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval)"""
     probability = 1/13.
     tolerance = probability * (1 - probability) / math.sqrt(n) * variance_multiplier
-    tolerance10 = 4*probability * (1 - 4*probability) / math.sqrt(n) * variance_multiplier
-    for card in range(10):
-        if card == 8: assert(abs(cards[card] /float(n) - 4*probability) < tolerance10)
-        else: assert(abs(cards[card] /float(n) - probability) < tolerance)
+    for card in range(13):
+        assert(abs(cards[card] /float(n) - probability) < tolerance)
+
+
+
+####################################################################################################
+########                                CARD VALUE TESTS                                    ########
+####################################################################################################
+
+def test_card_value():
+    """Checks that the card_value function is correct."""
+    assert card_value(1) == 11
+    assert card_value(2) == 2
+    assert card_value(3) == 3
+    assert card_value(4) == 4
+    assert card_value(5) == 5
+    assert card_value(6) == 6
+    assert card_value(7) == 7
+    assert card_value(8) == 8
+    assert card_value(9) == 9
+    assert card_value(10) == 10
+    assert card_value(11) == 10
+    assert card_value(12) == 10
+    assert card_value(13) == 10
 
 ####################################################################################################
 ########                               DRAW TESTS                                           ########
 ####################################################################################################
 
 def test_draw_validity():
-    """Checks that the draw method is valid (cards between 2 and 11)."""
+    """Checks that the draw method is valid (cards between 1 and 13)."""
     for _ in range(NB_TESTS):
         nb_decks = random.randint(1,8)
         deck = DecksOfCards(nb_decks=nb_decks, fraction_not_in_play=0.0)
         for _ in range(min(HORIZON, nb_decks * 52)):
             card = deck.draw()
-            assert card >= 2 and card <= 11
+            assert card >= 1 and card <= 13
 
 def test_draw_frequency():
     """Checks that the draw method gives the correct frequency of cards."""
@@ -144,10 +164,10 @@ def test_cards_out_correctness():
     for _ in range(NB_TESTS):
         nb_decks = random.randint(1,8)
         deck = DecksOfCards(nb_decks=nb_decks, fraction_not_in_play=0.0)
-        cards_out = [0] * 10
+        cards_out = [0] * 13
         for _ in range(min(HORIZON, nb_decks * 52)):
             card = deck.draw()
-            cards_out[card - 2] += 1
+            cards_out[card - 1] += 1
             assert deck.get_cards_out() == cards_out
 
 def test_cards_out_sums_to_nb_cards_out():
@@ -219,7 +239,7 @@ def test_reshuffle_at_right_time():
 def test_reshuffle_draw_frequency():
     """Checks that the draw frequency is correct after a reshuffle."""
     total_n = 0
-    total_cards_out = np.zeros(10)
+    total_cards_out = np.zeros(13)
 
     for _ in range(NB_TESTS):
         nb_decks = random.randint(1,8)

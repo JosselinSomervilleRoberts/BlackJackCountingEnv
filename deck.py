@@ -1,6 +1,14 @@
 import random
 
 
+def card_value(card):
+    if card == 1:
+        return 11
+    elif card >= 10:
+        return 10
+    else:
+        return card
+
 class DecksOfCards:
 
     def __init__(self, nb_decks: int, fraction_not_in_play: float = 0.2):
@@ -13,26 +21,18 @@ class DecksOfCards:
         self.shuffle()
         self.nb_cards_out = 0
         self.high_low_count = 0
-        self.cards_out = [0] * 10
+        self.cards_out = [0] * 13
         self.needs_shuffle = False
 
     def generate_cards(self):
         self.cards = []
-        for deck in range(self.nb_decks):
+        for _ in range(self.nb_decks):
             for value in range(1, 14):
-                value = min(value, 10)
-                if value == 1: value = 11
                 for _ in range(4):
                     self.cards.append(value)
 
     def shuffle(self):
         random.shuffle(self.cards)
-        # Fisher-Yates shuffle
-        # n = len(self.cards)
-        # for i in range(n-1, 0, -1):
-        #     j = random.randint(0, i)
-        #     self.cards[i], self.cards[j] = self.cards[j], self.cards[i]
-        # return self.cards
 
     def get_cards(self):
         return self.cards
@@ -41,7 +41,7 @@ class DecksOfCards:
         if len(self.cards) == 0: raise Exception("No more cards in the deck.")
         card = self.cards.pop()
         self.nb_cards_out += 1
-        self.cards_out[card - 2] += 1
+        self.cards_out[card - 1] += 1
         if self.nb_cards_out >= self.threshold: self.needs_shuffle = True
         if card >= 10 or card == 1: self.high_low_count -= 1
         elif card < 7: self.high_low_count += 1

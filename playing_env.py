@@ -1,6 +1,7 @@
+from typing import List
 import numpy as np
 import gym
-from deck import DecksOfCards
+from deck import DecksOfCards, card_value
 
 ACTION_HIT = 0
 ACTION_STAND = 1
@@ -8,29 +9,33 @@ ACTION_DOUBLE = 2
 ACTION_SPLIT = 3
 ACTION_SURRENDER = 4
 
+OBS_PLAYER_SUM_IDX = 0
+OBS_DEALER_CARD_IDX = 1
+OBS_USABLE_ACE_IDX = 2
+OBS_CAN_SPLIT_IDX = 3
+OBS_CAN_DOUBLE_IDX = 4
+
 
 class BlackJackPlayingEnv(gym.Env):
     def __init__(self, decks: DecksOfCards, rules: dict = {}, illegal_action_reward: float = -100):
         '''
         RULES list:
-        - surrender (bool, default: False): whether the player can surrender or not.
-        - double_after_split (bool, default: False): whether the player can double after split or not.
-        - double_on (int, default: 2): the number of cards the player can double on.
-        - split (bool, default: False): whether the player can split or not.
-        - resplit (bool, default: False): whether the player can resplit or not.
-        - resplit_aces (bool, default: False): whether the player can resplit aces or not.
+        - surrender_allowed (bool, default: False): whether the player can surrender or not.
+        - double_after_split_allowed (bool, default: False): whether the player can double after split or not.
+        - double_allowed (bool, default: False): whether the player can double or not.
+        - split_allowed (bool, default: False): whether the player can split or not.
+        - resplit_allowed (bool, default: False): whether the player can resplit or not.
         - dealer_hit_soft_17 (bool, default: True): whether the dealer hits on soft 17 or not.
         - blackjack_payout (float, default: 1.5): the payout for a blackjack.
         - floor_finished_reward (boold, default: True): whether the reward is the floor of the reward or not.
         '''
         self.illegal_action_reward = illegal_action_reward
         self.decks = decks
-        self.surrender = rules["surrender"] if "surrender" in rules else False
-        self.double_after_split = rules["double_after_split"] if "double_after_split" in rules else False
-        self.double_on = rules["double_on"] if "double_on" in rules else 2
-        self.split = rules["split"] if "split" in rules else False
-        self.resplit = rules["resplit"] if "resplit" in rules else False
-        self.resplit_aces = rules["resplit_aces"] if "resplit_aces" in rules else False
+        self.surrender_allowed = rules["surrender_allowed"] if "surrender_allowed" in rules else False
+        self.double_after_split_allowed = rules["double_after_split_allowed"] if "double_after_split_allowed" in rules else False
+        self.double_allowed = rules["double_allowed"] if "double_allowed" in rules else 2
+        self.split_allowed = rules["split_allowed"] if "split_allowed" in rules else False
+        self.resplit_allowed = rules["resplit_allowed"] if "resplit_allowed" in rules else False
         self.dealer_hit_soft_17 = rules["dealer_hit_soft_17"] if "dealer_hit_soft_17" in rules else True
         self.blackjack_payout = rules["blackjack_payout"] if "blackjack_payout" in rules else 1.5
         self.floor_finished_reward = rules["floor_finished_reward"] if "floor_finished_reward" in rules else True
@@ -63,42 +68,37 @@ class BlackJackPlayingEnv(gym.Env):
         self.cur_state = None
         self.reset()
 
-    def hit(self, cards: list, sum: int, usable_ace: int):
+    def hit(self, cards: List[int]):
         card = self.decks.draw()
         cards.append(card)
-        usable_aces = usable_ace + (card == 11)
-        sum += card
-        if usable_aces > 0 and sum > 21:
-            sum -= 10
-            usable_aces -= 1
-        usable_ace = 1 if usable_aces > 0 else 0
-        double, split = False, False
-        double = 1 if (self.double_on >= len(cards)) and (not self.has_split or self.double_after_split) else 0
-        split = 0
-        if (len(cards) == 2 and cards[0] == cards[1] and self.split): # Potential split
-            if not self.has_split or self.resplit: # check if player can resplit
-                if cards[0] != 11 or self.resplit_aces: # check if the player can resplit aces
-                    split = 1
-        state = (sum, card, usable_ace, split, double)
-        return state
+        return card
 
 
     def play_dealer(self):
-        dealer_sum = self.dealer_cards[0] + self.dealer_cards[1]
-        if dealer_sum == 22: dealer_sum = 12
-        usable_ace = 1 if self.dealer_cards[0] == 11 or self.dealer_cards[1] == 11 else 0
+        (dealer_sum, usable_ace) = self.compute_hand_value(self.dealer_cards)
 
         # play the dealer
         while dealer_sum < 17 or (dealer_sum == 17 and usable_ace > 0 and self.dealer_hit_soft_17):
-            (dealer_sum, _, usable_ace, _, _) = self.hit(self.dealer_cards, dealer_sum, usable_ace)
+            self.hit(self.dealer_cards)
+            (dealer_sum, usable_ace) = self.compute_hand_value(self.dealer_cards)
         return dealer_sum
 
     def finish_game(self):
         dealer_sum = self.play_dealer()
         player_sum = self.cur_state[0]
-        if player_sum == 21 and len(self.player_cards) == 2:
-            reward = 2 * self.blackjack_payout
-            reason = "player blackjack"
+        reward, reason = 0, ""
+
+        if BlackJackPlayingEnv.check_blackjack(self.player_cards):
+            if BlackJackPlayingEnv.check_blackjack(self.dealer_cards):
+                reward = 0
+                reason = "dealer and player blackjack"
+            else:
+                reward = 2 * self.blackjack_payout
+                if self.floor_finished_reward: reward = np.floor(reward)
+                reason = "player blackjack"
+        elif BlackJackPlayingEnv.check_blackjack(self.dealer_cards):
+            reward = -2
+            reason = "dealer blackjack"
         elif dealer_sum > 21:
             reward = 2
             reason = "dealer bust"
@@ -114,31 +114,34 @@ class BlackJackPlayingEnv(gym.Env):
         return reward, reason, dealer_sum
 
     def step(self, action: int):
-        dealer_card = self.cur_state[1]
+        # check if the action is legal
+        if not self.is_legal_action(action):
+            return self.cur_state, self.illegal_action_reward, False, {"reason": "illegal action"}
+
         reward, reason, done, info = 0, "", False, {}
 
         # hit
         if action == ACTION_HIT:
-            (player_sum, _, usable_ace, split, double) = self.hit(self.player_cards, self.cur_state[0], self.cur_state[2])
-            self.cur_state = (player_sum, dealer_card, usable_ace, split, double)
-            if player_sum > 21:
+            self.hit(self.player_cards)
+            self.cur_state = self.compute_state()
+            if self.cur_state[OBS_PLAYER_SUM_IDX] > 21:
                 reward = -2
                 reason = "player bust"
                 done = True
+            else:
+                reward = 0
+                done = False
 
         # stay
         elif action == ACTION_STAND:
             reward, reason, _ = self.finish_game()
-            player_sum = self.cur_state[0]
             done = True
 
         # double
         elif action == ACTION_DOUBLE:
-            if not self.cur_state[4]: # cannot double
-                return (self.cur_state, self.illegal_action_reward, True, {}), self.illegal_action_reward, True, {"reason": "illegal action, cannot double"}
-            (player_sum, _, usable_ace, split, double) = self.hit(self.player_cards, self.cur_state[0], self.cur_state[2])
-            self.cur_state = (player_sum, dealer_card, usable_ace, split, double)
-            if player_sum > 21:
+            self.hit(self.player_cards)
+            self.cur_state = self.compute_state()
+            if self.cur_state[OBS_PLAYER_SUM_IDX] > 21:
                 reward = -4
                 reason = "player bust"
             else:
@@ -148,68 +151,54 @@ class BlackJackPlayingEnv(gym.Env):
 
         # split
         elif action == ACTION_SPLIT:
-            if not self.cur_state[3]: # cannot split
-                return (self.cur_state, self.illegal_action_reward, True, {}), self.illegal_action_reward, True, {"reason": "illegal action, cannot split"}
-
             # Split the cards
-            other_cards = [self.player_cards[1]]
-            self.player_cards = [self.player_cards[0]]
-
-            # Game 1 (first card)
-            (player_sum, _, usable_ace, split, double) = self.hit(cards = self.player_cards,
-                                                                    sum = self.player_cards[0],
-                                                                    usable_ace = 1 if self.player_cards[0] == 11 else 0)
-            self.cur_state = (player_sum, dealer_card, usable_ace, split, double)
-
-            # Game 2 (second card)
-            (player_sum, _, usable_ace, split, double) = self.hit(cards = other_cards,
-                                                                    sum = other_cards[0],
-                                                                    usable_ace = 1 if other_cards[0] == 11 else 0)
-            other_state = (player_sum, dealer_card, usable_ace, split, double)
-            self.other_states = [other_state] + self.other_states
-            self.player_other_cards = [other_cards] + self.player_other_cards
+            hand1 = [self.player_cards[0]]
+            hand2 = [self.player_cards[1]]
+            self.hit(hand1)
+            self.hit(hand2)
 
             # Check if we got some blackjacks
-            if self.cur_state[0] == 21 and self.other_states[0][0] == 21: # Double blackjack
-                done = True
-                reward = 4 * self.blackjack_payout
-                if self.floor_finished_reward: reward = 2 * np.floor(2 * self.blackjack_payout)
-                reason = "player double blackjack"
-                info["obs_of_finished_split"] = self.other_states.pop(0)
-                self.player_other_cards.pop(0)
-            elif self.cur_state[0] == 21: # Blackjack for first card
-                done = True
-                reward = 2 * self.blackjack_payout
-                if self.floor_finished_reward: reward = np.floor(reward)
+            if BlackJackPlayingEnv.check_blackjack(hand1):
+                if BlackJackPlayingEnv.check_blackjack(hand2): # Double blackjack
+                    done = True
+                    reward = 2 * self.get_blackjack_reward()
+                    reason = "player double blackjack"
+                else: # Blackjack for first card
+                    reward = self.get_blackjack_reward()
+                    reason = "player blackjack"
+                    self.player_cards = hand2
+                    self.cur_state = self.compute_state(hand2)
+            elif BlackJackPlayingEnv.check_blackjack(hand2): # Blackjack for second card
+                reward = self.get_blackjack_reward()
                 reason = "player blackjack"
-            elif self.other_states[0][0] == 21: # Blackjack for second card
-                done = False
-                reward = 2 * self.blackjack_payout
-                if self.floor_finished_reward: reward = np.floor(reward)
-                reason = "player blackjack"
-                info["obs_of_finished_split"] = self.other_states.pop(0)
-                info["additional"] = "playing other game due to split"
-                self.player_other_cards.pop(0)
+                self.player_cards = hand1
+                self.cur_state = self.compute_state(hand1)
+            else: # No blackjack
+                reward = 0
+                reason = "player split"
+                self.player_cards = hand1
+                self.cur_state = self.compute_state(hand1)
+                state2 = self.compute_state(hand2)
+                info["other_state"] = state2
+                self.player_other_hands = [hand2] + self.player_other_hands
 
         # surrender
         elif action == ACTION_SURRENDER:
-            if not self.surrender: # cannot surrender
-                return (self.cur_state, self.illegal_action_reward, True, {}), self.illegal_action_reward, True, {"reason": "illegal action, cannot surrender"}
             reward = -1
             reason = "player surrender"
             done = True
 
         # Even if the game is done, we still need to play the other games if there are any (due to splits)
-        original_done = done
-        if done and len(self.other_states) > 0:
-            info["obs_of_finished_split"] = self.cur_state
-            self.cur_state = self.other_states.pop(0)
-            self.player_cards = self.player_other_cards.pop(0)
+        if done and len(self.player_other_hands) > 0:
             done = False
+            info["split_finished_state"] = self.cur_state
+            self.player_cards = self.player_other_hands.pop(0)
+            self.cur_state = self.compute_state(self.player_cards)
             info["additional"] = "playing other game due to split"
+            info["split_done"] = True
 
         if len(reason) > 0: info["reason"] = reason
-        return (self.cur_state, reward, original_done, info), reward, done, info
+        return self.cur_state, reward, done, info
 
     def get_random_action(self):
         return self.action_space.sample()
@@ -226,51 +215,84 @@ class BlackJackPlayingEnv(gym.Env):
         elif action == ACTION_STAND:
             return True
         elif action == ACTION_DOUBLE:
-            return self.cur_state[4]
+            return self.cur_state[OBS_CAN_DOUBLE_IDX]
         elif action == ACTION_SPLIT:
-            return self.cur_state[3]
+            return self.cur_state[OBS_CAN_SPLIT_IDX]
         elif action == ACTION_SURRENDER:
-            return self.surrender
+            return self.surrender_allowed
 
+    def compute_hand_value(self, cards: List[int]):
+        hand_sum = sum([card_value(card) for card in cards])
+        usable_aces = cards.count(1)
+        while hand_sum > 21 and usable_aces > 0:
+            hand_sum -= 10
+            usable_aces -= 1
+        usable_ace = (usable_aces > 0)
+        return (hand_sum, usable_ace)
+
+    def check_if_can_split(self, cards: List[int]):
+        if self.split_allowed and len(cards) == 2 and cards[0] == cards[1]:
+            if self.has_already_split:
+                if self.resplit_allowed: return True
+            else:
+                return True
+        return False
+
+    def check_if_can_double(self, cards: List[int]):
+        if len(cards) == 2 and self.double_allowed:
+            if self.has_already_split:
+                if self.double_after_split_allowed: return True
+            else:
+                return True
+        return False
+
+    def compute_state(self, cards: List[int] = None):
+        if cards is None: cards = self.player_cards
+        (player_sum, usable_ace) = self.compute_hand_value(cards)
+        dealer_card_value = card_value(self.dealer_cards[0])
+        split  = self.check_if_can_split(cards)
+        double = self.check_if_can_double(cards)
+        return (player_sum, dealer_card_value, usable_ace, split, double)
+
+    def check_blackjack(cards):
+        return len(cards) == 2 and card_value(cards[0]) + card_value(cards[1]) == 21
+
+    def get_blackjack_reward(self):
+        reward = 2 * self.blackjack_payout
+        if self.floor_finished_reward: reward = np.floor(reward)
+        return reward
 
     def reset(self):
         # We include done and reward in the observation to account for potential naturals (blackjack).
-        done, reward, reason, info = False, 0, "", {}
+        info = {"done": False, "reward": 0}
 
+        # Draw two cards for the player and the dealer
         card1_player = self.decks.draw()
         card1_dealer = self.decks.draw()
         card2_player = self.decks.draw()
         card2_dealer = self.decks.draw()
         self.player_cards = [card1_player, card2_player]
-        self.player_other_cards = [] # for splits
-        self.other_states = [] # for splits
-        self.has_split = False
+        self.player_other_hands = [] # for splits
+        self.has_already_split = False
         self.dealer_cards = [card1_dealer, card2_dealer]
 
-        if card1_dealer + card2_dealer == 21:
-            done = True
-            if card1_player + card2_player == 21:
-                reward = 0
-                reason = "dealer and player blackjack"
+        # Check if we got some blackjacks
+        if BlackJackPlayingEnv.check_blackjack(self.player_cards):
+            info["done"] = True
+            if BlackJackPlayingEnv.check_blackjack(self.dealer_cards):
+                info["reward"] = 0
+                info["reason"] = "dealer and player blackjack"
             else:
-                reward = -2
-                reason = "dealer blackjack"
-        elif card1_player + card2_player == 21: 
-            done = True
-            reward = 2 * self.blackjack_payout
-            if self.floor_finished_reward: reward = np.floor(reward)
-            reason = "player blackjack"
+                info["reward"] = self.get_blackjack_reward()
+                info["reason"] = "player blackjack"
+        elif BlackJackPlayingEnv.check_blackjack(self.dealer_cards):
+            info["done"] = True
+            info["reward"] = -2
+            info["reason"] = "dealer blackjack"
 
-        player_sum = card1_player + card2_player
-        if player_sum == 22: player_sum = 12
-        dealer_card = card1_dealer
-        usable_ace = 1 if card1_player == 11 or card2_player == 11 else 0
-        split = 1 if card1_player == card2_player and self.split else 0
-        double = 1 if self.double_on else 0
-        self.cur_state = (player_sum, dealer_card, usable_ace, split, double)
-
-        if len(reason) > 0: info["reason"] = reason
-        return (self.cur_state, reward, done, info) # reward and done are only used for naturals
+        # compute the state
+        self.cur_state = self.compute_state()
+        return self.cur_state, info # reward and done are only used for naturals
 
 
     def render(self, mode='human'):
