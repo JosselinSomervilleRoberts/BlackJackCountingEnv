@@ -2,10 +2,8 @@ import random
 from playing_env import BlackJackPlayingEnv, OBS_PLAYER_SUM_IDX, OBS_DEALER_CARD_IDX, OBS_USABLE_ACE_IDX, OBS_CAN_SPLIT_IDX, OBS_CAN_DOUBLE_IDX, ACTION_STAND, ACTION_SPLIT, ACTION_SURRENDER, ACTION_DOUBLE
 from deck import InfiniteDeckOfCards, DecksOfCards, SimulatedCountingDeckOfCards
 from blackjack_env import BlackJackBettingEnv
-from train_betting_agent import AgentPolicy
+from agent_policy import AgentPolicy
 from tqdm import tqdm
-import numpy as np
-import pickle
 import matplotlib.pyplot as plt
 from train_betting_agent import show_betting_agent
 

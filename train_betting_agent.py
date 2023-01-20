@@ -2,35 +2,13 @@ from agent_betting import AgentBetting
 from blackjack_env import BlackJackBettingEnv
 from playing_env import BlackJackPlayingEnv, ACTION_STAND
 from deck import DecksOfCards
-from policy_iteration import format_state, policy_and_reward_load
+from policy_iteration import format_state_no_counting, policy_and_reward_load
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap, BoundaryNorm, Normalize
+from matplotlib.colors import Normalize
+from agent_policy import AgentPolicy
 import random
-
-class AgentPolicy:
-
-    def __init__(self):
-        pass
-
-    def load(self, name, format_state, default_action):
-        success, self.policy, self.reward, self.state_action_to_idx = policy_and_reward_load(name)
-        if success: return self.load_from_policy(self.policy, format_state, default_action)
-        return False
-
-    def load_from_policy(self, policy, format_state, default_action):
-        self.policy = policy
-        self.format_state = format_state
-        self.default_action = default_action
-        return True
-
-    def choose_action(self, state):
-        action = self.default_action
-        formated_state = self.format_state(state)
-        if formated_state in self.policy: action = self.policy[formated_state]
-        if action is None: raise Exception("No action for state " + str(state))
-        return action
 
 
 
@@ -43,7 +21,7 @@ def train(rules, initial_money = 100, N_EPISODES = 100000):
     decks = DecksOfCards(nb_decks=6, fraction_not_in_play=0.2)
     playing_env = BlackJackPlayingEnv(decks = decks, rules=rules)
     playing_agent = AgentPolicy()
-    playing_agent.load(name="policy_iteration", format_state=format_state, default_action=ACTION_STAND)
+    playing_agent.load(name="policy_iteration", format_state=format_state_no_counting, default_action=ACTION_STAND)
     betting_env = BlackJackBettingEnv(playing_env, playing_agent, initial_money=initial_money, min_bet=rules["min_bet"], max_bet=rules["max_bet"])
     betting_agent = AgentBetting(learning_rate=learning_rate,
                                     epsilon_func=epsilon_func,

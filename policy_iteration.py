@@ -6,28 +6,7 @@ import numpy as np
 from policy_show import show_policy
 import pickle
 import matplotlib.pyplot as plt
-
-
-def policy_and_reward_save(name, policy, reward, state_action_to_idx):
-    with open(name + '_policy.pickle', 'wb') as f:
-        pickle.dump(policy, f, pickle.HIGHEST_PROTOCOL)
-    with open(name + '_reward.pickle', 'wb') as f:
-        pickle.dump(reward, f, pickle.HIGHEST_PROTOCOL)
-    with open(name + '_state.pickle', 'wb') as f:
-        pickle.dump(state_action_to_idx, f, pickle.HIGHEST_PROTOCOL)
-
-def policy_and_reward_load(name):
-    try:
-        policy, reward, state_action_to_idx = None, None, None
-        with open(name + '_policy.pickle', 'rb') as f:
-            policy = pickle.load(f)
-        with open(name + '_reward.pickle', 'rb') as f:
-            reward = pickle.load(f)
-        with open(name + '_state.pickle', 'rb') as f:
-            state_action_to_idx = pickle.load(f)
-        return True, policy, reward, state_action_to_idx
-    except:
-        return False, None, None, None
+from agent_policy import policy_and_reward_save, policy_and_reward_load
 
 
 def get_card_of_value(card_value):
@@ -85,7 +64,7 @@ def get_legal_actions(state, rules):
     if rules["surrender_allowed"]: list_actions.append(ACTION_SURRENDER)    # surrendering
     return list_actions
 
-def format_state(state):
+def format_state_no_counting(state):
     return (state[OBS_PLAYER_SUM_IDX], state[OBS_DEALER_CARD_IDX], int(state[OBS_USABLE_ACE_IDX]), int(state[OBS_CAN_SPLIT_IDX]), int(state[OBS_CAN_DOUBLE_IDX]))
 
 def register_mapping(state, rules, idx, dict_sati, list_itsa):
@@ -211,7 +190,7 @@ def train(rules, N_ITER = 1000, N_POLICY_ITER = 5):
             reward_total = reward
             while not done:
                 action = ACTION_STAND
-                if state in policy: action = policy[format_state(state)]
+                if state in policy: action = policy[format_state_no_counting(state)]
                 state, reward, done, _ = env.step(action)
                 reward_total += reward
 
@@ -258,7 +237,7 @@ def evaluate_policy(policy, rules, N_EPISODES=10000):
             done = False
             while not done:
                 action = None
-                state = format_state(state)
+                state = format_state_no_counting(state)
                 if state[OBS_PLAYER_SUM_IDX] == 21:
                     action = ACTION_STAND
                 elif state in policy: action = policy[state]

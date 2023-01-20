@@ -1,6 +1,14 @@
 import math
 import numpy as np
 
+
+
+class SimpleAgentBetting:
+
+    def __init__(self, min_money_to_bid_higher=20, min_bet=1, max_bet=1000):
+        self.min_money_to_bid_higher = min_money_to_bid_higher
+
+
 class AgentBetting:
 
     def __init__(self, learning_rate, epsilon_func, true_count_step=1, money_step=1, initial_money=1000, min_bet=1, max_bet=1000, true_count_max=12, true_count_min=-12, discount_factor=0.99):

@@ -6,6 +6,7 @@ import numpy as np
 from policy_show import show_policy
 import pickle
 import matplotlib.pyplot as plt
+from agent_policy import policy_and_reward_load, policy_and_reward_save
 
 
 def instantiate_policy(name, idx_to_state_action, policy):
@@ -21,28 +22,6 @@ def instantiate_policy(name, idx_to_state_action, policy):
             if reduced_state in policy_no_counting:
                 policy[state] = policy_no_counting[reduced_state]
     return True
-
-
-def policy_and_reward_save(name, policy, reward, state_action_to_idx):
-    with open(name + '_policy_counting.pickle', 'wb') as f:
-        pickle.dump(policy, f, pickle.HIGHEST_PROTOCOL)
-    with open(name + '_reward_counting.pickle', 'wb') as f:
-        pickle.dump(reward, f, pickle.HIGHEST_PROTOCOL)
-    with open(name + '_state_counting.pickle', 'wb') as f:
-        pickle.dump(state_action_to_idx, f, pickle.HIGHEST_PROTOCOL)
-
-def policy_and_reward_load(name):
-    try:
-        policy, reward, state_action_to_idx = None, None, None
-        with open(name + '_policy_counting.pickle', 'rb') as f:
-            policy = pickle.load(f)
-        with open(name + '_reward_counting.pickle', 'rb') as f:
-            reward = pickle.load(f)
-        with open(name + '_state_counting.pickle', 'rb') as f:
-            state_action_to_idx = pickle.load(f)
-        return True, policy, reward, state_action_to_idx
-    except:
-        return False, None, None, None
 
 
 def get_card_of_value(card_value):
@@ -107,7 +86,7 @@ def get_legal_actions(state, rules):
     if rules["surrender_allowed"]: list_actions.append(ACTION_SURRENDER)    # surrendering
     return list_actions
 
-def format_state(state):
+def format_state_counting(state):
     true_count_rounded = max(-12, min(12, 3 * round(state[5] / 3.0)))
     return (state[OBS_PLAYER_SUM_IDX], state[OBS_DEALER_CARD_IDX], int(state[OBS_USABLE_ACE_IDX]), int(state[OBS_CAN_SPLIT_IDX]), int(state[OBS_CAN_DOUBLE_IDX]), true_count_rounded)
 
@@ -243,7 +222,7 @@ def train(rules, N_ITER = 1000, N_POLICY_ITER = 5):
                 true_count = state[5]
                 deck.true_count = true_count
                 deck.reset()
-                state = format_state(state)
+                state = format_state_counting(state)
                 if state in policy:
                     action = policy[state]
                 state, reward, done, _ = env.step(action)
@@ -292,7 +271,7 @@ def evaluate_policy(policy, rules, N_EPISODES=10000):
             done = False
             while not done:
                 action = None
-                state = format_state(state)
+                state = format_state_counting(state)
                 if state[OBS_PLAYER_SUM_IDX] == 21:
                     action = ACTION_STAND
                 elif state in policy: action = policy[state]
@@ -322,11 +301,12 @@ if __name__ == "__main__":
                 "floor_finished_reward": True
             }
 
-    name = "save"
     N_ITER = 7500
+    N_POLICY_ITER = 5
+    name = "counting_" + str(N_ITER) + "_" + str(N_POLICY_ITER)
     success, policy, reward, state_action_to_idx = policy_and_reward_load(name)
     if not success:
-        policy, reward, state_action_to_idx = train(rules, N_ITER=N_ITER, N_POLICY_ITER=5)
+        policy, reward, state_action_to_idx = train(rules, N_ITER=N_ITER, N_POLICY_ITER=N_POLICY_ITER)
         policy_and_reward_save(name, policy, reward, state_action_to_idx)
         show_policy(policy, reward, state_action_to_idx, N_ITER, count=12)
     else:
