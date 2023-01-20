@@ -46,23 +46,27 @@ class BlackJackBettingEnv(gym.Env):
             return (self.current_money, self.playing_env.decks.get_true_count()), self.illegal_bet_reward, False, {"status": "not enough money"}
         if bet > self.max_bet:
             return (self.current_money, self.playing_env.decks.get_true_count()), self.illegal_bet_reward, False, {"status": "bet too high"}
-        self.current_money -= bet
 
         # play the game
         playing_obs, playing_reward, playing_done, playing_info = None, None, False, {}
         playing_obs, playing_info = self.playing_env.reset()
         sum_reward = 0
+        
+        # The player or the dealer has a natural blackjack
+        if "done" in playing_info and playing_info["done"]:
+            sum_reward = playing_info["reward"]
+            playing_done = True
+
         while not playing_done:
-            playing_obs, playing_reward, playing_done, playing_info = self.playing_env.step(self.player_agent.choose_action(playing_obs, playing_reward, playing_done, playing_info))
+            playing_obs, playing_reward, playing_done, playing_info = self.playing_env.step(self.player_agent.choose_action(playing_obs))
             sum_reward += playing_reward
             #print("playing_obs", playing_obs, "playing_reward", playing_reward)
         self.playing_env.decks.round_finished()
 
         # update the player's money
         #print("sum_reward", sum_reward, "bet", bet)
-        gain = sum_reward * bet
-        profit = gain - bet
-        self.current_money += gain
+        profit = sum_reward * bet / 2.0
+        self.current_money += profit
 
         # return the observation, the reward, whether the game is over or not, and additional information
         obs = (self.current_money, round(self.playing_env.decks.get_true_count()))
@@ -72,7 +76,6 @@ class BlackJackBettingEnv(gym.Env):
         if self.current_money < self.min_bet: 
             done = True
             status = "game over"
-            reward = - 2 * self.initial_money
         info = {"status": status}
         return obs, reward, done, info
 

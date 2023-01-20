@@ -28,6 +28,9 @@ class DeckOfCards:
                 for _ in range(4):
                     self.cards.append(value)
 
+    def round_finished(self):
+        pass
+
 
 class InfiniteDeckOfCards(DeckOfCards):
 

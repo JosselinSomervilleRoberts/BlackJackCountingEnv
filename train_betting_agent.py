@@ -11,17 +11,25 @@ import random
 
 class AgentPolicy:
 
-    def __init__(self, name=""):
-        if not self.load(name):
-            raise Exception("Could not load policy")
+    def __init__(self):
+        pass
 
-    def load(self, name):
+    def load(self, name, format_state, default_action):
         success, self.policy, self.reward, self.state_action_to_idx = policy_and_reward_load(name)
-        return success
+        if success: return self.load_from_policy(self.policy, format_state, default_action)
+        return False
 
-    def choose_action(self, state, reward, done, info):
-        action = ACTION_STAND
-        if state in self.policy: action = self.policy[format_state(state)]
+    def load_from_policy(self, policy, format_state, default_action):
+        self.policy = policy
+        self.format_state = format_state
+        self.default_action = default_action
+        return True
+
+    def choose_action(self, state):
+        action = self.default_action
+        formated_state = self.format_state(state)
+        if formated_state in self.policy: action = self.policy[formated_state]
+        if action is None: raise Exception("No action for state " + str(state))
         return action
 
 
@@ -34,8 +42,9 @@ def train(rules, initial_money = 100, N_EPISODES = 100000):
 
     decks = DecksOfCards(nb_decks=6, fraction_not_in_play=0.2)
     playing_env = BlackJackPlayingEnv(decks = decks, rules=rules)
-    policy_agent = AgentPolicy("save")
-    betting_env = BlackJackBettingEnv(playing_env, policy_agent, initial_money=initial_money, min_bet=rules["min_bet"], max_bet=rules["max_bet"])
+    playing_agent = AgentPolicy()
+    playing_agent.load(name="policy_iteration", format_state=format_state, default_action=ACTION_STAND)
+    betting_env = BlackJackBettingEnv(playing_env, playing_agent, initial_money=initial_money, min_bet=rules["min_bet"], max_bet=rules["max_bet"])
     betting_agent = AgentBetting(learning_rate=learning_rate,
                                     epsilon_func=epsilon_func,
                                     true_count_step=2,
@@ -63,18 +72,21 @@ def train(rules, initial_money = 100, N_EPISODES = 100000):
 
 
 def show_betting_agent(betting_agent, initial_money, min_true_count, max_true_count):
-    extent = [- 0.5, 2 * initial_money - 1, max_true_count + 0.5, min_true_count - 0.5]
+    extent = [0.5, initial_money, max_true_count + 0.5, min_true_count - 0.5]
 
     # Policy
-    norm_bet = Normalize(vmin=1, vmax=100)
+    norm_bet = Normalize(vmin=1, vmax=5)
     data = np.zeros((max_true_count - min_true_count + 1, 2*initial_money))
 
-    for money in range(0, 2*initial_money):
+    for money in range(1, 2*initial_money+1):
         for true_count in range(min_true_count, max_true_count + 1):
-            data[true_count - min_true_count, money] = betting_agent.choose_action((money, true_count))
-    im = plt.imshow(data, cmap='hot', interpolation='none', norm=norm_bet, extent=extent, aspect=2*initial_money/(max_true_count - min_true_count + 1))
+            data[true_count - min_true_count, money-1] = betting_agent.choose_action((money, true_count))
+    im = plt.imshow(data, cmap='hot', interpolation='none', norm=norm_bet, extent=extent, aspect=initial_money/(max_true_count - min_true_count + 1))
+
+    print(data)
     plt.colorbar(im)
     plt.show()
+
 
 if __name__ == "__main__":
     rules = {

@@ -330,7 +330,7 @@ if __name__ == "__main__":
         policy_and_reward_save(name, policy, reward, state_action_to_idx)
         show_policy(policy, reward, state_action_to_idx, N_ITER, count=12)
     else:
-        show_policy(policy, reward, state_action_to_idx, N_ITER, count=12)
-        show_policy(policy, reward, state_action_to_idx, N_ITER, count=0)
-        show_policy(policy, reward, state_action_to_idx, N_ITER, count=-12)
-        evaluate_policy(policy, rules, N_EPISODES=5000000)
+        evaluate_policy(policy, rules, N_EPISODES=500000)
+        # show_policy(policy, reward, state_action_to_idx, N_ITER, count=12)
+        # show_policy(policy, reward, state_action_to_idx, N_ITER, count=0)
+        # show_policy(policy, reward, state_action_to_idx, N_ITER, count=-12)
